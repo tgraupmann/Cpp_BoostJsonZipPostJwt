@@ -1,9 +1,14 @@
 // Cpp_BoostJsonZipPostJwt.cpp : This file contains the 'main' function. Program execution begins and ends there.
 //
 
-#include <iostream>
 #include <string>
 #include <sstream>
+#include <iostream>
+#include <istream>
+#include <ostream>
+
+#include "Secret.h"
+#include <json/json.h>
 
 #include <boost/iostreams/filtering_streambuf.hpp>
 #include <boost/iostreams/copy.hpp>
@@ -14,7 +19,9 @@
 #include <boost/archive/iterators/transform_width.hpp>
 #include <boost/archive/iterators/ostream_iterator.hpp>
 
-#define NOMINMAX
+#include <cpprest/http_client.h>
+#include <cpprest/filestream.h>
+
 #include <Windows.h>
 
 // Ref: https://github.com/Thalhammer/jwt-cpp
@@ -22,10 +29,16 @@
 #undef min 
 #include <jwt-cpp/jwt.h>
 
-#include "Secret.h"
-#include <json/json.h>
-
 using namespace std;
+
+//cpprestsdk
+using namespace utility;                    // Common utilities like string conversions
+using namespace web;                        // Common features like URIs.
+using namespace web::http;                  // Common HTTP functionality
+using namespace web::http::client;          // HTTP client features
+using namespace concurrency::streams;       // Asynchronous streams
+
+#include <tchar.h>
 
 string DoCompression(const string& data)
 {
@@ -67,7 +80,7 @@ string DoBase64Encode(const string& text)
     return os.str();
 }
 
-void DoJWT(string userId)
+string DoJWT(string userId)
 {
     string secret = VALUE_BACKEND_SECRET;
     int mod4 = secret.size() % 4;
@@ -102,10 +115,57 @@ void DoJWT(string userId)
         .set_expires_at(future)
         .set_type("JWS")
         .set_subject(strSubject)
-        .set_payload_claim("sample", jwt::claim(strJson))
+        .set_payload_claim("", jwt::claim(strJson))
         .sign(jwt::algorithm::hs256{ secret });
 
-    cout << "Token: " << token.c_str() << endl;
+    return token.c_str();
+}
+
+void DoPost()
+{
+    using ostream = Concurrency::streams::ostream;
+    using fstream = Concurrency::streams::fstream;
+
+    auto fileStream = std::make_shared<ostream>();
+
+    // Open stream to output file.
+    pplx::task<void> requestTask = fstream::open_ostream(U("results.html")).then([=](ostream outFile)
+    {
+        *fileStream = outFile;
+
+        // Create http_client to send the request.
+        http_client client(U("http://www.bing.com/"));
+
+        // Build request URI and start the request.
+        uri_builder builder(U("/search"));
+        builder.append_query(U("q"), U("cpprestsdk github"));
+        return client.request(methods::GET, builder.to_string());
+    })
+
+    // Handle response headers arriving.
+    .then([=](http_response response)
+    {
+        printf("Received response status code:%u\n", response.status_code());
+
+        // Write response body into the file.
+        return response.body().read_to_end(fileStream->streambuf());
+    })
+
+    // Close the file stream.
+    .then([=](size_t)
+    {
+        return fileStream->close();
+    });
+
+    // Wait for all the outstanding I/O to complete and handle any exceptions
+    try
+    {
+        requestTask.wait();
+    }
+    catch (const std::exception& e)
+    {
+        printf("Error exception:%s\n", e.what());
+    }
 }
 
 int main()
@@ -122,5 +182,19 @@ int main()
     cout << "Base64 Size: " << base64.size() << endl;
     cout << "Base64: " << base64 << endl;
 
-    DoJWT("12345");
+    string token = DoJWT("12345");
+    cout << "Token: " << token << endl;
+
+    DoPost();
 }
+
+
+#pragma comment (lib, "bcrypt")
+#pragma comment (lib, "crypt32")
+#pragma comment (lib, "winhttp")
+
+#ifdef _DEBUG
+#pragma comment (lib, "cpprest142_2_10d")
+#else
+#pragma comment (lib, "cpprest142_2_10")
+#endif
