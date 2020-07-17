@@ -126,12 +126,11 @@ void DoPost()
     try
     {
         // Create http_client to send the request.
-        http_client client(U("http://tagenigma.com/"));
+        http_client client(U("https://tagenigma.com/"));
 
         // Build request URI and start the request.
         uri_builder builder(U("/post"));
-        builder.append_query(U("q"), U("cpprestsdk github"));
-        client.request(methods::GET, builder.to_string())
+        client.request(methods::POST, builder.to_string())
 
         // Handle response headers arriving.
         .then([=](http_response response)
