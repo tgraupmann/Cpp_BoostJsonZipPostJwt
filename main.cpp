@@ -27,6 +27,7 @@
 #undef max
 #undef min 
 #include <jwt-cpp/jwt.h>
+#include "picojson/picojson.h"
 
 using namespace std;
 
@@ -79,9 +80,8 @@ string DoBase64Encode(const string& text)
     return os.str();
 }
 
-string DoJWT(string userId)
+string DoJWT(string userId, string secret)
 {
-    string secret = VALUE_BACKEND_SECRET;
     int mod4 = secret.size() % 4;
     if (mod4 > 0)
     {
@@ -91,30 +91,22 @@ string DoJWT(string userId)
 
     Json::FastWriter fastWriter;
     
-
-    Json::Value jsonSubject;
-    jsonSubject["user_id"] = userId;
-    jsonSubject["role"] = "external";
-    string strSubject = fastWriter.write(jsonSubject);
-
     auto future = std::chrono::system_clock::now() + std::chrono::hours{ 48 };
-    auto exp = std::chrono::duration_cast<std::chrono::microseconds>(future.time_since_epoch()).count();
+    auto exp = std::chrono::duration_cast<std::chrono::seconds>(future.time_since_epoch()).count();
 
-    Json::Value jsonPayload;
-    jsonPayload["exp"] = exp;
-    jsonPayload["channel_id"] = userId;
-    jsonPayload["user_id"] = userId;
-    jsonPayload["role"] = "external";
-    jsonPayload["pubsub_perms"]["send"][0] = "*";
-    string strJson = fastWriter.write(jsonPayload);
+    picojson::array jsonSend;
+    picojson::object jsonPerms;
+    jsonSend.push_back(picojson::value("*"));
+    jsonPerms["send"] = picojson::value(jsonSend);
 
     auto token = jwt::create()
-        .set_issuer("Twitch")
-        .set_issued_at(std::chrono::system_clock::now())
+        //.set_algorithm("http://www.w3.org/2001/04/xmldsig-more#hmac-sha256")
+        .set_type("JWT")
         .set_expires_at(future)
-        .set_type("JWS")
-        .set_subject(strSubject)
-        .set_payload_claim("", jwt::claim(strJson))
+        .set_payload_claim("channel_id", jwt::claim(userId))
+        .set_payload_claim("user_id", jwt::claim(userId))
+        .set_payload_claim("role", jwt::claim(string("external")))
+        .set_payload_claim("pubsub_perms", jwt::claim(picojson::value(jsonPerms)))
         .sign(jwt::algorithm::hs256{ secret });
 
     return token.c_str();
@@ -164,8 +156,8 @@ int main()
     cout << "Base64 Size: " << base64.size() << endl;
     cout << "Base64: " << base64 << endl;
 
-    string token = DoJWT("12345");
-    cout << "Token: " << token << endl;
+    string jwtToken = DoJWT(VALUE_USER_ID, VALUE_BACKEND_SECRET);
+    cout << "JWT Token: " << jwtToken << endl;
 
     DoPost();
 }
