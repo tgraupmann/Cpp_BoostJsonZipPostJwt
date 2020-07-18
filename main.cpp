@@ -15,7 +15,7 @@
 #include <boost/iostreams/filter/gzip.hpp>
 
 #include <boost/archive/iterators/base64_from_binary.hpp>
-#include <boost/archive/iterators/insert_linebreaks.hpp>
+#include <boost/archive/iterators/binary_from_base64.hpp>
 #include <boost/archive/iterators/transform_width.hpp>
 #include <boost/archive/iterators/ostream_iterator.hpp>
 
@@ -80,18 +80,57 @@ string DoBase64Encode(const string& text)
     return os.str();
 }
 
+string DoBase64Decode(const string& text)
+{
+    using namespace boost::archive::iterators;
+
+    std::stringstream os;
+    bool bPaded = false;
+    typedef boost::archive::iterators::transform_width<boost::archive::iterators::
+        binary_from_base64<const char*>, 8, 6> Base64DecodeIterator;
+
+    int iLength = text.size();
+    // Remove the padding characters, cf. https://svn.boost.org/trac/boost/ticket/5629
+    if (iLength && text.c_str()[iLength - 1] == '=') {
+        bPaded = true;
+        --iLength;
+        if (iLength && text.c_str()[iLength - 1] == '=')
+        {
+            --iLength;
+        }
+    }
+    if (iLength == 0)
+    {
+        return "";
+    }
+
+    if (bPaded)
+    {
+        iLength--;
+    }
+
+    std::copy(Base64DecodeIterator(
+        text.c_str()),
+        Base64DecodeIterator(text.c_str() + iLength),
+        std::ostream_iterator<char>(os));
+
+    return os.str();
+}
+
 string DoJWT(string userId, string secret)
 {
+    ///*
     int mod4 = secret.size() % 4;
     if (mod4 > 0)
     {
         secret += string('=', 4 - mod4);
     }
+    //*/
 
 
     Json::FastWriter fastWriter;
     
-    auto future = std::chrono::system_clock::now() + std::chrono::hours{ 48 };
+    auto future = std::chrono::system_clock::now() + std::chrono::hours{ 2 };
     auto exp = std::chrono::duration_cast<std::chrono::seconds>(future.time_since_epoch()).count();
 
     picojson::array jsonSend;
@@ -156,7 +195,11 @@ int main()
     cout << "Base64 Size: " << base64.size() << endl;
     cout << "Base64: " << base64 << endl;
 
-    string jwtToken = DoJWT(VALUE_USER_ID, VALUE_BACKEND_SECRET);
+    string unBase64 = DoBase64Decode(base64);
+    cout << "Unbase64 Size: " << unBase64.size() << endl;
+    cout << "Unbase64: " << unBase64 << endl;
+
+    string jwtToken = DoJWT(VALUE_USER_ID, DoBase64Decode(VALUE_BACKEND_SECRET));
     cout << "JWT Token: " << jwtToken << endl;
 
     DoPost();
