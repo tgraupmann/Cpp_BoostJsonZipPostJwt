@@ -117,17 +117,19 @@ string DoBase64Decode(const string& text)
     return os.str();
 }
 
-string DoJWT(string userId, string secret)
+string PadSecret(const string& secret)
 {
-    ///*
+    string result = secret;
     int mod4 = secret.size() % 4;
     if (mod4 > 0)
     {
-        secret += string('=', 4 - mod4);
+        result += string(4 - mod4, '=');
     }
-    //*/
+    return result;
+}
 
-
+string DoJWT(string userId, string secret)
+{
     Json::FastWriter fastWriter;
     
     auto future = std::chrono::system_clock::now() + std::chrono::hours{ 2 };
@@ -147,6 +149,11 @@ string DoJWT(string userId, string secret)
         .set_payload_claim("role", jwt::claim(string("external")))
         .set_payload_claim("pubsub_perms", jwt::claim(picojson::value(jsonPerms)))
         .sign(jwt::algorithm::hs256{ secret });
+
+    auto decoded = jwt::decode(token);
+
+    jwt::verify().allow_algorithm(jwt::algorithm::hs256(secret)).verify(decoded);
+    
 
     return token.c_str();
 }
