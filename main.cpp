@@ -117,23 +117,19 @@ string DoBase64Decode(const string& text)
     return os.str();
 }
 
-string PadSecret(const string& secret)
-{
-    string result = secret;
-    int mod4 = secret.size() % 4;
-    if (mod4 > 0)
-    {
-        result += string(4 - mod4, '=');
-    }
-    return result;
-}
-
 string DoJWT(string userId, string secret)
 {
     Json::FastWriter fastWriter;
+
+    time_t t = time(NULL);
+    struct tm offset_epoch;
+    localtime_s(&offset_epoch, &t);
+    long offsetMinutes = offset_epoch.tm_min;
     
-    auto future = std::chrono::system_clock::now() + std::chrono::hours{ 2 };
+    auto future = std::chrono::system_clock::now() + std::chrono::minutes{ 120 - offsetMinutes };
     auto exp = std::chrono::duration_cast<std::chrono::seconds>(future.time_since_epoch()).count();
+
+    cout << "EXP: " << exp << endl;
 
     picojson::array jsonSend;
     picojson::object jsonPerms;
@@ -141,7 +137,6 @@ string DoJWT(string userId, string secret)
     jsonPerms["send"] = picojson::value(jsonSend);
 
     auto token = jwt::create()
-        //.set_algorithm("http://www.w3.org/2001/04/xmldsig-more#hmac-sha256")
         .set_type("JWT")
         .set_expires_at(future)
         .set_payload_claim("channel_id", jwt::claim(userId))
@@ -206,7 +201,10 @@ int main()
     cout << "Unbase64 Size: " << unBase64.size() << endl;
     cout << "Unbase64: " << unBase64 << endl;
 
-    string jwtToken = DoJWT(VALUE_USER_ID, DoBase64Decode(VALUE_BACKEND_SECRET));
+    cout << "Secret: " << DoBase64Encode(VALUE_BACKEND_SECRET) << endl;
+
+    // works
+    string jwtToken = DoJWT(VALUE_USER_ID, VALUE_BACKEND_SECRET);
     cout << "JWT Token: " << jwtToken << endl;
 
     DoPost();
