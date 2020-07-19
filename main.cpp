@@ -145,11 +145,6 @@ string DoJWT(string userId, string secret)
         .set_payload_claim("pubsub_perms", jwt::claim(picojson::value(jsonPerms)))
         .sign(jwt::algorithm::hs256{ secret });
 
-    auto decoded = jwt::decode(token);
-
-    jwt::verify().allow_algorithm(jwt::algorithm::hs256(secret)).verify(decoded);
-    
-
     return token.c_str();
 }
 
@@ -217,6 +212,10 @@ int main()
 
 #ifdef _DEBUG
 #pragma comment (lib, "cpprest142_2_10d")
+#pragma comment (lib, "libcryptod")
+#pragma comment (lib, "libssld")
 #else
 #pragma comment (lib, "cpprest142_2_10")
+#pragma comment (lib, "libcrypto")
+#pragma comment (lib, "libssl")
 #endif
